@@ -209,7 +209,7 @@ def check_sync(follow_session, leader_session):
 def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
     target = leader_ticks + (10*10000000)
     set_playtime(follow_id, target, leader_item)
-    for i in range(9):
+    for i in range(8):
         send_command(follow_id, "Pause")
         time.sleep(1)
     follow_session.syncing = False
