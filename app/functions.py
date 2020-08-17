@@ -82,13 +82,14 @@ def update_or_create_sessions():
         'X-Emby-Device-Name': 'Emby Sync',
         'X-Emby-Client': platform.system()
     }
-    params = {'ActiveWithinSeconds': 300}
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, headers=headers)
     response_json = response.json()
     for z in response_json:
         try:
             emby_session = db.session.query(Session).filter_by(session_id=z['Id']).first()
             date_time_obj = datetime.datetime.fromisoformat(z['LastActivityDate'][:-2])
+            if stale_calc(date_time_obj, 300):
+                continue
             if emby_session:
                 emby_session.timestamp = date_time_obj
                 db.session.commit()
