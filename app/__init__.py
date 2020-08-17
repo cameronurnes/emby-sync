@@ -18,7 +18,6 @@ login.login_view = 'login'
 bootstrap = Bootstrap(app)
 
 from app.functions import *
-print('test', flush=True)
 app.apscheduler.add_job(func=sync_cycle, trigger='interval', seconds=2, id='sync_cycle')
 
 from app import routes, models, functions

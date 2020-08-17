@@ -39,12 +39,10 @@ def update_or_create_account(response):
         user.device_id = response['SessionInfo']['DeviceId']
         user.access_key = response['AccessToken']
         db.session.commit()
-        print('Commit update', flush=True)
         update_or_create_sessions()
         return True
     else:
         newuser = User(emby_id=response['User']['Id'], username=response['User']['ConnectUserName'].lower(), access_key=response['AccessToken'], device_id=response['SessionInfo']['DeviceId'])
-        print(newuser.username, flush=True)
         db.session.add(newuser)
         db.session.commit()
         return True
