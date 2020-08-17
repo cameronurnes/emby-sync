@@ -259,9 +259,10 @@ def send_command(session, command):
         print(response.status_code, flush=True)
 
 def get_room_leader(room):
-    leader = db.session.query(Session).filter_by(room=room, leader=True).first()
-    if leader and leader.device_name != 'Emby Connect' and current_user.emby_id != leader.user_id:
-        return "  --  Current leader is {0}".format(leader.username)
+    leader_session = db.session.query(Session).filter_by(room=room, leader=True).first()
+    if leader_session and leader_session.device_name != 'Emby Connect':
+        leader_user = db.session.query(User).filter_by(emby_id=leader_session.user_id).first()
+        return "  --  Current leader is {0}".format(leader_user.username)
     else:
         return ""
 
