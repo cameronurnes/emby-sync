@@ -11,10 +11,10 @@ RUN venv/bin/pip install gunicorn
 
 COPY app app
 COPY migrations migrations
-COPY embysync.py config.py boot.sh ./
+COPY emby-sync.py config.py boot.sh ./
 RUN chmod +x boot.sh
 
-ENV FLASK_APP embysync.py
+ENV FLASK_APP emby-sync.py
 
 RUN chown -R emby-sync:emby-sync ./
 USER emby-sync
