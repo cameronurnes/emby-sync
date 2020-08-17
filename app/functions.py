@@ -74,7 +74,6 @@ def update_or_create_sessions():
     emby_session = db.session.query(Session).filter_by(device_id='session-sync').all()
     for z in emby_session:
         try:
-            print(z.session_id, flush=True)
             set_room(app.config['DEFAULT_ROOM'], z.session_id)
         except KeyError:
             continue
