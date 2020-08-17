@@ -71,9 +71,13 @@ def end_session():
         return False
 
 def update_or_create_sessions():
-    emby_session = db.session.query(Session).filter_by(device_id='session-sync').first()
-    if emby_session:
-        set_room(app.config['DEFAULT_ROOM'], emby_session.session_id)
+    emby_session = db.session.query(Session).filter_by(device_id='session-sync').all()
+    for z in emby_session:
+        try:
+            print(z.session_id, flush=True)
+            set_room(app.config['DEFAULT_ROOM'], z.session_id)
+        except KeyError:
+            continue
     url = '{0}/Sessions'.format(app.config['EMBY_SERVER'])
     headers = {
         'accept': 'applicaton/json',
@@ -106,11 +110,15 @@ def update_or_create_sessions():
                     emby_session.is_paused = z['PlayState']['IsPaused']
                     db.session.commit()
             else:
-                emby_session = db.session.query(User).filter_by(emby_id=z['UserId']).first()
-                if emby_session:
-                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceID'])
+                if z['DeviceId'] != 'session-sync':
+                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'])
                     db.session.add(newsession)
                     db.session.commit()
+                else:
+                    newsession = Session(session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'])
+                    db.session.add(newsession)
+                    db.session.commit()
+
         except KeyError:
             continue
 
