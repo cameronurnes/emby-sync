@@ -71,7 +71,7 @@ def end_session():
         return False
 
 def update_or_create_sessions():
-    emby_session = db.session.query(Session).filter_by(device_name='Emby Sync').first()
+    emby_session = db.session.query(Session).filter_by(device_id='session-sync').first()
     if emby_session:
         set_room(app.config['DEFAULT_ROOM'], emby_session.session_id)
     url = '{0}/Sessions'.format(app.config['EMBY_SERVER'])
@@ -108,7 +108,7 @@ def update_or_create_sessions():
             else:
                 emby_session = db.session.query(User).filter_by(emby_id=z['UserId']).first()
                 if emby_session:
-                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'])
+                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceID'])
                     db.session.add(newsession)
                     db.session.commit()
         except KeyError:
