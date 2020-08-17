@@ -182,7 +182,7 @@ def sync_cycle():
     session_list = Session.query.all()
     for z in session_list:
         stale_check(z)
-        if (z.leader == True):
+        if (z.leader == True) or (z.device_id == 'session-sync'):
             continue
         else:
             if (z.room != None) and (z.is_stale == False):
