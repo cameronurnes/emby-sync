@@ -47,9 +47,8 @@ def index():
             for z in form.session_id.data:
                 set_dead(z)
                 session_cleanup()
-                set_leader(False, z)
-                flash('Left room(s)')
-                return redirect(url_for('index'))
+            flash('Left room(s)')
+            return redirect(url_for('index'))
 
         return redirect(url_for('index'))
     return render_template('index.html', title='Home', sessions=current_user.sessions, form=form)
