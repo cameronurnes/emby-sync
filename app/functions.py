@@ -197,7 +197,7 @@ def sync_cycle():
                     if (leader_session.playing == True) and (z.playing == True) and (leader_session.ticks != 0):
                         sync_drift = check_sync(z.ticks, leader_session.ticks)
                         print(session_user.username+" "+z.device_name+" sync: "+str(sync_drift))
-                        if sync_drift >= 5:
+                        if sync_drift >= 8:
                             app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
                             z.syncing = True
                             db.session.commit()
