@@ -49,8 +49,12 @@ def index():
                 session_cleanup()
             flash('Left room(s)')
             return redirect(url_for('index'))
-
-        return redirect(url_for('index'))
+        if form.submit_clear_all.data:
+            for z in current_user.sessions:
+                set_dead(z.session_id)
+                session_cleanup()
+            flash('Unsynced All')
+            return redirect(url_for('index'))
     return render_template('index.html', title='Home', sessions=current_user.sessions, form=form)
 
 @app.route('/login', methods=['GET', 'POST'])

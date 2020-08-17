@@ -11,7 +11,8 @@ class LoginForm(FlaskForm):
 class SessionList(FlaskForm):
     room_selection = SelectField('Existing Rooms')
     room_custom = StringField('New room name')
-    session_id = SelectMultipleField('To select more than one, hold ⌘ on Mac or Ctrl on Windows', validators=[DataRequired()])
+    session_id = SelectMultipleField('To select more than one, hold ⌘ on Mac or Ctrl on Windows')
     submit_room = SubmitField('Join room')
     submit_clear = SubmitField('Leave room')
+    submit_clear_all = SubmitField('Unsync All')
     submit_leader = SubmitField('Select leader')
