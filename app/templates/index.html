@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+
+{% block app_content %}
+    <h1>Hi, {{ current_user.username }}!</h1>
+    <br>
+    <form method="POST" action="/">
+      <h2>Select which room to join</h2>
+      {{ form.hidden_tag() }}
+      {{ wtf.form_field(form.room_selection) }}
+      {{ wtf.form_field(form.room_custom) }}
+      <h2>Select which players to sync</h2>
+      {{ wtf.form_field(form.session_id) }}
+      {{ wtf.form_field(form.submit_room) }}
+      {{ wtf.form_field(form.submit_leader) }}
+      {{ wtf.form_field(form.submit_clear) }}
+    </form>
+        <h2>Tips:</h2>
+        <p>1) Chromecasts are unable to follow. but may lead</p>
+        <p>2) Followers taking longer than 10 or so seconds to load will need to reduce quality</p>
+        <p>3) Sessions offline more than 30 minutes will leave sync.  You may log out of Emby Sync to do this immediately.</p>
+        <p>4) Due to the nature of Emby, sync precision can not be more precise than 2 seconds or so in either direction.
+{% endblock %}
