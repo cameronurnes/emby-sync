@@ -71,6 +71,7 @@ def end_session():
         return False
 
 def update_or_create_sessions():
+    ## Just for the Emby Sync user aka the bot
     emby_session = db.session.query(Session).filter_by(device_id='session-sync').all()
     for z in emby_session:
         try:
@@ -146,6 +147,12 @@ def set_room(room_name, emby_session_id):
         emby_session.room = room_name
         emby_session.leader = False
         db.session.commit()
+
+        ## For when a new person joins that isn't the leader
+        if(emby_session.device_id != 'session-sync'):
+            send_command(emby_session.session_id, "Message")
+
+    ## No leader exists
     else:
         emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
         emby_session.room = room_name
@@ -295,8 +302,8 @@ def set_playtime(session, time, item_id):
 
 def send_command(session, command):
     url = '{0}/Sessions/{1}/Playing/{2}'.format(app.config['EMBY_SERVER'], session, command)
-    if(command == 'Join'):
-        url = '{0}/Sessions/{1}/{2}'.format(app.config['EMBY_SERVER'], session, command)
+    if(command == 'Message'):
+        url = '{0}/Sessions/{1}/Message'.format(app.config['EMBY_SERVER'], session)
         
     headers = {
         'accept': 'application/json',
@@ -309,8 +316,8 @@ def send_command(session, command):
         
     }
     params = {
-        'Text': 'Join',
-        'Header': 'Click Join to Watch Together'
+        'Text': 'Click "Got It" to Watch Together',
+        'Header': 'Emby Sync'
     }
     response = requests.post(url, headers=headers,params=params)
     if response.status_code == 204:
