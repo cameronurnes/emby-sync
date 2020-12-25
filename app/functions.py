@@ -87,6 +87,8 @@ def update_or_create_sessions():
     }
     response = requests.get(url, headers=headers)
     response_json = response.json()
+
+    active_users = []
     for z in response_json:
         try:
             emby_session = db.session.query(Session).filter_by(session_id=z['Id']).first()
@@ -118,8 +120,12 @@ def update_or_create_sessions():
                     db.session.add(newsession)
                     db.session.commit()
 
+            active_users.append(z['Id'])
+
         except KeyError:
             continue
+    
+    return active_users
 
 def set_leader(room_name, emby_session_id):
     emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
@@ -178,12 +184,17 @@ def session_cleanup():
     db.session.commit()
 
 def sync_cycle():
-    update_or_create_sessions()
-    session_list = Session.query.all()
-    for z in session_list:
-        # stale_check(z)
+    active_users = update_or_create_sessions()
+    full_session_list = Session.query.all()
 
-        ## This is just for the leader, so nothing happens
+    ## This will only get the users that are actually connected to the Emby server
+    current_session_list = [session for session in full_session_list if(session.session_id in active_users)]
+
+    for z in current_session_list:
+        # stale_check(z)
+        # print(z.session_id)
+
+        ## This is just for the leader/emby-sync, so nothing happens
         if (z.leader == True) or (z.device_id == 'session-sync'):
             continue
         ## This is just for the followers
@@ -212,7 +223,7 @@ def sync_cycle():
                     ## This if for when the leader resumes from a paused state
                     if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == True) and (z.is_paused == True):
                         print("RESUME")
-                        send_command(z.session_id, "Unpause")
+                        # send_command(z.session_id, "Unpause")
                         z.syncing = True
                         db.session.commit()
                     ## This if for when the leader starts playing and the follower is does not have any video loaded
