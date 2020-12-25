@@ -49,9 +49,9 @@ def update_or_create_account(response):
 
 def end_session():
     for z in current_user.sessions:
-            set_dead(z.session_id)
-            db.session.commit()
-            session_cleanup()
+        set_dead(z.session_id)
+        db.session.commit()
+        session_cleanup()
 
     url = '{0}/Sessions/Logout'.format(app.config['EMBY_SERVER'])
     headers = {
@@ -115,6 +115,7 @@ def update_or_create_sessions():
                     newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'])
                     db.session.add(newsession)
                     db.session.commit()
+
                 else:
                     newsession = Session(session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'])
                     db.session.add(newsession)
@@ -189,7 +190,6 @@ def sync_cycle():
 
     ## This will only get the users that are actually connected to the Emby server
     current_session_list = [session for session in full_session_list if(session.session_id in active_users)]
-
     for z in current_session_list:
         # stale_check(z)
         # print(z.session_id)
@@ -206,7 +206,6 @@ def sync_cycle():
 
                     ## Leader are Follower are not currently in any video
                     if(leader_session.playing == False) and (z.playing == False):
-                        print("asdf")
                         pass
                     ## This is for when the follower tries to start playing when synced to a room. This forces the follower to follow the leader
                     if(leader_session.playing == False) and (z.playing == True):
@@ -221,14 +220,15 @@ def sync_cycle():
                         z.syncing = False
                         db.session.commit()
                     ## This if for when the leader resumes from a paused state
-                    if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == True) and (z.is_paused == True):
+                    if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == True) and (z.is_paused == True) and (z.syncing == False):
                         print("RESUME")
-                        # send_command(z.session_id, "Unpause")
+                        send_command(z.session_id, "Unpause")
                         z.syncing = True
                         db.session.commit()
                     ## This if for when the leader starts playing and the follower is does not have any video loaded
                     if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == False) and (leader_session.ticks != 0):
                         print("FOLLOWER NEEDS TO START PLAYING")
+                        send_command(leader_session.session_id,"Pause")
                         app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
                         z.syncing = True
                         db.session.commit()
@@ -245,23 +245,31 @@ def check_sync(follow_session, leader_session):
     return drift
 
 def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
-    target = leader_ticks + (10*10000000) # Load 10 seconds ahead to give user time to buffer
+    target = leader_ticks + (3*10000000) # Load 10 seconds ahead to give user time to buffer
     set_playtime(follow_id, target, leader_item)
+
     print("PAUSING")
-    for i in range(8):
+    end = time.time() + 3 ## Adding 10 seconds to the current time
+    while((time.time() < end) or (follow_session.ticks == None)):
         send_command(follow_id, "Pause")
         time.sleep(0.5)
         send_command(follow_id, "Pause")
         time.sleep(0.5)
 
+    # for i in range(8):
+    #     send_command(follow_id, "Pause")
+    #     time.sleep(0.5)
+    #     send_command(follow_id, "Pause")
+    #     time.sleep(0.5)
+
     follow_session.syncing = False
     db.session.commit()
-    print("UNPAUSING")
-    for i in range(2):
-        send_command(follow_id, "Unpause")
-        time.sleep(0.5)
-        send_command(follow_id, "Unpause")
-        time.sleep(0.5)
+    # print("UNPAUSING")
+    # for i in range(2):
+    #     send_command(follow_id, "Unpause")
+    #     time.sleep(0.5)
+    #     send_command(follow_id, "Unpause")
+    #     time.sleep(0.5)
 
 def set_playtime(session, time, item_id):
     url = '{0}/Sessions/{1}/Playing'.format(app.config['EMBY_SERVER'], session)
@@ -287,6 +295,9 @@ def set_playtime(session, time, item_id):
 
 def send_command(session, command):
     url = '{0}/Sessions/{1}/Playing/{2}'.format(app.config['EMBY_SERVER'], session, command)
+    if(command == 'Join'):
+        url = '{0}/Sessions/{1}/{2}'.format(app.config['EMBY_SERVER'], session, command)
+        
     headers = {
         'accept': 'application/json',
         'Content-Type': 'application/json',
@@ -294,9 +305,14 @@ def send_command(session, command):
         'X-Emby-Client-Version': '0.1',
         'X-Emby-Device-Id': 'session-sync',
         'X-Emby-Device-Name': 'Emby Sync',
-        'X-Emby-Token': app.config['SECRET_KEY']
+        'X-Emby-Token': app.config['SECRET_KEY'],
+        
     }
-    response = requests.post(url, headers=headers)
+    params = {
+        'Text': 'Join',
+        'Header': 'Click Join to Watch Together'
+    }
+    response = requests.post(url, headers=headers,params=params)
     if response.status_code == 204:
         return 0
     else:
