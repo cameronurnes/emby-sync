@@ -15,7 +15,7 @@ def index():
     sessions_blob = Session.query.all()
     room_list = [(i.room, i.room+get_room_leader(i.room)) for i in sessions_blob if i.room != None]
     room_list = list(set(room_list))
-    form_list = [(i.session_id, i.device_name+" "+i.client_name+get_room_name(i)) for i in current_user.sessions if (i.is_stale == False) and (i.device_name != 'Emby Sync')]
+    form_list = [(i.session_id, i.device_name+" - "+i.client_name+" - "+i.ip_address+get_room_name(i)) for i in getSessionList() if (i.is_stale == False) and (i.device_name != 'Emby Sync')]
     form = SessionList()
     form.room_selection.choices = room_list
     form.session_id.choices = form_list

@@ -38,6 +38,7 @@ class Session(db.Model):
     is_stale = db.Column(db.Boolean, default=False)
     is_dead = db.Column(db.Boolean, default=False)
     device_id = db.Column(db.String(32))
+    ip_address = db.Column(db.String(32))
 
     def __repr__(self):
         return '<Session {}>'.format(self.session_id)

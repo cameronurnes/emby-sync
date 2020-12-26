@@ -70,7 +70,7 @@ def end_session():
         print(response.text, flush=True)
         return False
 
-def getUserList():
+def getUserJson():
     url = '{0}/Users'.format(app.config['EMBY_SERVER'])
     headers = {
         'accept': 'applicaton/json',
@@ -81,10 +81,41 @@ def getUserList():
     }
     response = requests.get(url, headers=headers)
     response_json = response.json()
-    printJsonResponce(response_json)
+
+    return response_json
+
+def getSessionJson():
+    url = '{0}/Sessions'.format(app.config['EMBY_SERVER'])
+    headers = {
+        'accept': 'applicaton/json',
+        'X-Emby-Token': app.config['SECRET_KEY'],
+        'X-Emby-Device-Id': 'session-sync',
+        'X-Emby-Device-Name': 'Emby Sync',
+        'X-Emby-Client': platform.system()
+    }
+    response = requests.get(url, headers=headers)
+    response_json = response.json()
+
+    return response_json
+
+def getSessionList():
+    sessions = getSessionJson()
+    embySessionList = []
+    for session in sessions:
+        try:
+            emby_session = db.session.query(Session).filter_by(session_id=session['Id']).first()
+            
+            ## Checking if the emby_session isn't None
+            if(emby_session):
+                embySessionList.append(emby_session)
+
+        except KeyError:
+            pass
+    
+    return embySessionList
 
 def printJsonResponce(responce):
-    print(json.dumps(responce,indent=2))
+    print(json.dumps(responce,indent=3))
 
 def update_or_create_sessions():
     ## Just for the Emby Sync user aka the bot
@@ -110,10 +141,12 @@ def update_or_create_sessions():
         try:
             emby_session = db.session.query(Session).filter_by(session_id=z['Id']).first()
             date_time_obj = datetime.datetime.fromisoformat(z['LastActivityDate'][:-2])
+            ip_obj = z['RemoteEndPoint']
             if stale_calc(date_time_obj, 300):
                 continue
             if emby_session:
                 emby_session.timestamp = date_time_obj
+                emby_session.ip_address = ip_obj
                 db.session.commit()
                 if 'NowPlayingItem' in z:
                     emby_session.playing = True
@@ -129,12 +162,12 @@ def update_or_create_sessions():
                     db.session.commit()
             else:
                 if z['DeviceId'] != 'session-sync':
-                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'])
+                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'], ip_address=ip_obj)
                     db.session.add(newsession)
                     db.session.commit()
 
                 else:
-                    newsession = Session(session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'])
+                    newsession = Session(session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'], ip_address=ip_obj)
                     db.session.add(newsession)
                     db.session.commit()
 
