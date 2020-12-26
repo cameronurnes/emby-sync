@@ -34,7 +34,7 @@ def check_password(username, password):
         return False
 
 def update_or_create_account(response):
-    user = db.session.query(User).filter_by(username=response['User']['ConnectUserName'].lower()).first()
+    user = db.session.query(User).filter_by(username=response['User']['Name'].lower()).first()
     if user:
         user.device_id = response['SessionInfo']['DeviceId']
         user.access_key = response['AccessToken']
@@ -42,7 +42,7 @@ def update_or_create_account(response):
         update_or_create_sessions()
         return True
     else:
-        newuser = User(emby_id=response['User']['Id'], username=response['User']['ConnectUserName'].lower(), access_key=response['AccessToken'], device_id=response['SessionInfo']['DeviceId'])
+        newuser = User(emby_id=response['User']['Id'], username=response['User']['Name'].lower(), access_key=response['AccessToken'], device_id=response['SessionInfo']['DeviceId'])
         db.session.add(newuser)
         db.session.commit()
         return True
@@ -69,6 +69,22 @@ def end_session():
     else:
         print(response.text, flush=True)
         return False
+
+def getUserList():
+    url = '{0}/Users'.format(app.config['EMBY_SERVER'])
+    headers = {
+        'accept': 'applicaton/json',
+        'X-Emby-Token': app.config['SECRET_KEY'],
+        'X-Emby-Device-Id': 'session-sync',
+        'X-Emby-Device-Name': 'Emby Sync',
+        'X-Emby-Client': platform.system()
+    }
+    response = requests.get(url, headers=headers)
+    response_json = response.json()
+    printJsonResponce(response_json)
+
+def printJsonResponce(responce):
+    print(json.dumps(responce,indent=2))
 
 def update_or_create_sessions():
     ## Just for the Emby Sync user aka the bot
