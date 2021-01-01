@@ -47,6 +47,18 @@ def update_or_create_account(response):
         db.session.commit()
         return True
 
+## Broken
+# def addAllUsers():
+#     responses = getSessionJson()
+#     printJsonResponce(responses)
+#     for response in responses:
+#         user = db.session.query(User).filter_by(username=response['User']['Name'].lower()).first()
+#         ## If the user cannot be found in the database, add it
+#         if(not user):
+#             newuser = User(emby_id=response['User']['Id'], username=response['User']['Name'].lower(), access_key=response['AccessToken'], device_id=response['SessionInfo']['DeviceId'])
+#             db.session.add(newuser)
+#             db.session.commit()
+
 def end_session():
     for z in current_user.sessions:
         set_dead(z.session_id)
@@ -125,16 +137,8 @@ def update_or_create_sessions():
             set_room(app.config['DEFAULT_ROOM'], z.session_id)
         except KeyError:
             continue
-    url = '{0}/Sessions'.format(app.config['EMBY_SERVER'])
-    headers = {
-        'accept': 'applicaton/json',
-        'X-Emby-Token': app.config['SECRET_KEY'],
-        'X-Emby-Device-Id': 'session-sync',
-        'X-Emby-Device-Name': 'Emby Sync',
-        'X-Emby-Client': platform.system()
-    }
-    response = requests.get(url, headers=headers)
-    response_json = response.json()
+
+    response_json = getSessionJson()
 
     active_users = []
     for z in response_json:
@@ -248,7 +252,6 @@ def sync_cycle():
     current_session_list = [session for session in full_session_list if(session.session_id in active_users)]
     for z in current_session_list:
         # stale_check(z)
-        # print(z.session_id)
 
         ## This is just for the leader/emby-sync, so nothing happens
         if (z.leader == True) or (z.device_id == 'session-sync'):
@@ -258,6 +261,7 @@ def sync_cycle():
             if (z.room != None) and (z.is_stale == False):
                 leader_session = db.session.query(Session).filter_by(room=z.room, leader=True).first()
                 session_user = db.session.query(User).filter_by(emby_id=z.user_id).first()
+                    
                 if leader_session:
 
                     ## Leader are Follower are not currently in any video
@@ -290,22 +294,22 @@ def sync_cycle():
                         db.session.commit()
                     if(leader_session.playing == True) and (z.playing == True) and (leader_session.ticks != 0):
                         sync_drift = check_sync(z.ticks, leader_session.ticks)
-                        print(f"Follower: {session_user.username} {z.device_name} drift: {sync_drift}")
-                        # if abs(sync_drift) >= 12:
-                        #     app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
-                        #     z.syncing = True
-                        #     db.session.commit()
+                        print(f"Follower: {z.user_id} {z.device_name} drift: {sync_drift}")
+                        if abs(sync_drift) >= 10:
+                            app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
+                            z.syncing = True
+                            db.session.commit()
 
 def check_sync(follow_session, leader_session):
     drift = (follow_session/10000000) - (leader_session/10000000)
     return drift
 
 def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
-    target = leader_ticks + (3*10000000) # Load 10 seconds ahead to give user time to buffer
+    target = leader_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
     set_playtime(follow_id, target, leader_item)
 
     print("PAUSING")
-    end = time.time() + 3 ## Adding 10 seconds to the current time
+    end = time.time() + 3 ## Adding 3 seconds to the current time
     while((time.time() < end) or (follow_session.ticks == None)):
         send_command(follow_id, "Pause")
         time.sleep(0.5)
@@ -361,12 +365,11 @@ def send_command(session, command):
         'X-Emby-Client-Version': '0.1',
         'X-Emby-Device-Id': 'session-sync',
         'X-Emby-Device-Name': 'Emby Sync',
-        'X-Emby-Token': app.config['SECRET_KEY'],
-        
+        'X-Emby-Token': app.config['SECRET_KEY']
     }
     params = {
         'Text': 'Click "Got It" to Watch Together',
-        'Header': 'Emby Sync'
+        'Header': '&emsp;&emsp;Emby - Sync&emsp;&emsp;'
     }
     response = requests.post(url, headers=headers,params=params)
     if response.status_code == 204:
