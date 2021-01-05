@@ -10,7 +10,8 @@ import time
 from app import app
 from app import db
 from app import functions
-from app.models import User, Session
+from app.models import Session
+from app.models import User
 from flask_login import current_user
 
 def check_password(username, password):
@@ -18,7 +19,7 @@ def check_password(username, password):
     headers = {
         'accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Emby-Client': platform.system(),
+        'X-Emby-Client': platform.system(), 
         'X-Emby-Client-Version': '0.1',
         'X-Emby-Device-Id': ''.join(random.choices(string.ascii_uppercase + string.digits, k = 24)),
         'X-Emby-Device-Name': 'Emby Sync'
@@ -72,8 +73,8 @@ def end_session():
         'X-Emby-Client': platform.system(),
         'X-Emby-Client-Version': '0.1',
         'X-Emby-Device-Id': current_user.device_id,
-        'X-Emby-Device-Name': 'Emby Sync',
-        'X-Emby-Token': current_user.access_key
+        'X-Emby-Device-Name': 'Emby Sync'
+        # 'X-Emby-Token': current_user.access_key
     }
     response = requests.post(url, headers=headers)
     if response.status_code == 200:
@@ -136,7 +137,7 @@ def update_or_create_sessions():
         try:
             set_room(app.config['DEFAULT_ROOM'], z.session_id)
         except KeyError:
-            continue
+            pass
 
     response_json = getSessionJson()
 
@@ -147,7 +148,7 @@ def update_or_create_sessions():
             date_time_obj = datetime.datetime.fromisoformat(z['LastActivityDate'][:-2])
             ip_obj = z['RemoteEndPoint']
             if stale_calc(date_time_obj, 300):
-                continue
+                pass
             if emby_session:
                 emby_session.timestamp = date_time_obj
                 emby_session.ip_address = ip_obj
@@ -166,10 +167,10 @@ def update_or_create_sessions():
                     db.session.commit()
             else:
                 if z['DeviceId'] != 'session-sync':
+                    print("new session user")
                     newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'], ip_address=ip_obj)
                     db.session.add(newsession)
                     db.session.commit()
-
                 else:
                     newsession = Session(session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'], ip_address=ip_obj)
                     db.session.add(newsession)
@@ -178,11 +179,12 @@ def update_or_create_sessions():
             active_users.append(z['Id'])
 
         except KeyError:
-            continue
+            pass
     
     return active_users
 
 def set_leader(room_name, emby_session_id):
+    print("set_leader")
     emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
     if emby_session:
         emby_session.leader = False
@@ -194,25 +196,47 @@ def set_leader(room_name, emby_session_id):
     return True
 
 def set_room(room_name, emby_session_id):
-    emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
-    if emby_session:
-        emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
-        emby_session.room = room_name
-        emby_session.leader = False
-        db.session.commit()
+    print("set_room")
+    # emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
+    # if emby_session:
+    emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+    emby_session.room = room_name
+    emby_session.leader = False
+    db.session.commit()
 
-        ## For when a new person joins that isn't the leader
-        if(emby_session.device_id != 'session-sync'):
-            send_command(emby_session.session_id, "Message")
+    ## For when a new person joins that isn't the leader
+    if(emby_session.device_id != 'session-sync'):
+        send_command(emby_session.session_id, "Message")
 
     ## No leader exists
-    else:
-        emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
-        emby_session.room = room_name
-        if (emby_session.device_name != 'Emby Sync'):
-            emby_session.leader = True
-        db.session.commit()
+    # else:
+    #     emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+    #     emby_session.room = room_name
+    #     if (emby_session.device_name != 'Emby Sync'):
+    #         emby_session.leader = True
+    #     db.session.commit()
     return True
+
+# def set_room(room_name, emby_session_id):
+#     emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
+#     if emby_session:
+#         emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+#         emby_session.room = room_name
+#         emby_session.leader = False
+#         db.session.commit()
+
+#         ## For when a new person joins that isn't the leader
+#         if(emby_session.device_id != 'session-sync'):
+#             send_command(emby_session.session_id, "Message")
+
+#     ## No leader exists
+#     else:
+#         emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+#         emby_session.room = room_name
+#         if (emby_session.device_name != 'Emby Sync'):
+#             emby_session.leader = True
+#         db.session.commit()
+#     return True
 
 def stale_check(in_sesh):
     if (in_sesh.is_stale == False) and (stale_calc(in_sesh.timestamp, 300)):
@@ -254,13 +278,15 @@ def sync_cycle():
         # stale_check(z)
 
         ## This is just for the leader/emby-sync, so nothing happens
-        if (z.leader == True) or (z.device_id == 'session-sync'):
-            continue
+        if(z.device_id == 'session-sync'):
+            pass
+        # if (z.leader == True) or (z.device_id == 'session-sync'):
+        #     pass
         ## This is just for the followers
         else:
             if (z.room != None) and (z.is_stale == False):
                 leader_session = db.session.query(Session).filter_by(room=z.room, leader=True).first()
-                session_user = db.session.query(User).filter_by(emby_id=z.user_id).first()
+                # session_user = db.session.query(User).filter_by(emby_id=z.user_id).first()
                     
                 if leader_session:
 
@@ -381,8 +407,10 @@ def send_command(session, command):
 def get_room_leader(room):
     leader_session = db.session.query(Session).filter_by(room=room, leader=True).first()
     if leader_session and leader_session.device_name != 'Emby Connect':
-        leader_user = db.session.query(User).filter_by(emby_id=leader_session.user_id).first()
-        return "  --  Current leader is {0}".format(leader_user.username)
+        # leader_user = db.session.query(User).filter_by(emby_id=leader_session.user_id).first()
+        # return "  --  Current leader is {0}".format(leader_user.username)
+        return "  --  Current leader is "
+
     else:
         return ""
 

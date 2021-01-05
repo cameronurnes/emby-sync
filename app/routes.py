@@ -4,7 +4,8 @@ from app import db
 from app import app
 from app.forms import *
 from flask_login import current_user, login_user, logout_user, login_required
-from app.models import User, Session
+from app.models import Session
+from app.models import User
 from werkzeug.urls import url_parse
 from app.functions import *
 
@@ -20,6 +21,8 @@ def index():
     form.room_selection.choices = room_list
     form.session_id.choices = form_list
     if form.validate_on_submit():
+
+        ## When clicked on "Join Room"
         if form.submit_room.data:
             if form.room_custom.data:
                 room_choice = form.room_custom.data
