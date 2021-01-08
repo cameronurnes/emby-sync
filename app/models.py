@@ -39,9 +39,20 @@ class Session(db.Model):
     is_dead = db.Column(db.Boolean, default=False)
     device_id = db.Column(db.String(32))
     ip_address = db.Column(db.String(32))
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'))
 
     def __repr__(self):
         return '<Session {}>'.format(self.session_id)
+
+class Room(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    roomname = db.Column(db.String(128))
+    ticks = db.Column(db.BigInteger, default=0)
+    syncing = db.Column(db.Boolean, default=False)
+    item_id = db.Column(db.Integer)
+    is_paused = db.Column(db.Boolean, default=False)
+    playing = db.Column(db.Boolean, default=False)
+
 
 @login.user_loader
 def load_user(id):
