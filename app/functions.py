@@ -12,6 +12,7 @@ from app import db
 from app import functions
 from app.models import Session
 from app.models import User
+from app.models import Room
 from flask_login import current_user
 
 def check_password(username, password):
@@ -195,15 +196,28 @@ def set_leader(room_name, emby_session_id):
         db.session.commit()
     return True
 
-def set_room(room_name, emby_session_id):
-    print("set_room")
-    # emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
-    # if emby_session:
-    emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
-    emby_session.room = room_name
-    emby_session.leader = False
+def create_room(room_name):
+    print("creating new room")
+    new_room = Room(roomname=room_name)
+    db.session.add(new_room)
     db.session.commit()
 
+def set_room(room_name, emby_session_id):
+    print("set_room")
+    room = db.session.query(Room).filter_by(roomname=room_name).first()
+    if(room):
+        emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+
+        print("set room room")
+        emby_session.room_id = room.id
+        db.session.commit()
+    else:
+        create_room(room_name)
+        emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+        room = db.session.query(Room).filter_by(roomname=room_name).first()
+        emby_session.room_id = room.id
+        db.session.commit()
+        
     ## For when a new person joins that isn't the leader
     if(emby_session.device_id != 'session-sync'):
         send_command(emby_session.session_id, "Message")
@@ -415,9 +429,14 @@ def get_room_leader(room):
         return ""
 
 def get_room_name(session):
-    if session.room and session.leader != True:
-        return " -- Synced to {0}".format(session.room)
-    if session.room and session.leader == True:
-        return " -- Leading {0}".format(session.room)
-    else:
-        return " -- Not Synced"
+    room = db.session.query(Room).filter_by(id=session.room_id).first()
+    if(room):
+        return f' -- Synced to {room.roomname}'
+    return ' -- Not Synced'
+
+    # if session.room and session.leader != True:
+    #     return " -- Synced to {0}".format(session.room)
+    # if session.room and session.leader == True:
+    #     return " -- Leading {0}".format(session.room)
+    # else:
+    #     return " -- Not Synced"
