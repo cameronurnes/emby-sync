@@ -166,7 +166,7 @@ def update_or_create_sessions():
                             room.item_id = z['NowPlayingItem']['Id']
                             room.ticks = z['PlayState']['PositionTicks']
                             room.is_paused = z['PlayState']['IsPaused']
-                            print("testing in room")
+                            room.lastTimeUpdatedAt = datetime.datetime.now()
                     db.session.commit()
                 else:
                     emby_session.playing = False
@@ -220,6 +220,7 @@ def set_room(room_name, emby_session_id):
     room = db.session.query(Room).filter_by(roomname=room_name).first()
     emby_session.room_id = room.id
     emby_session.syncing = True
+    emby_session.lastTimeUpdatedAt = datetime.datetime.now()
     db.session.commit()
     
     ## if room is playing, set newly joined to session stuff
@@ -299,15 +300,19 @@ def updateRoom(room, active_room_sessions):
     newlastTimeUpdatedAt = datetime.datetime.now()
     checkForAnyUserPlaying = False
     for session in active_room_sessions:
+        # print(f'room: {room.lastTimeUpdatedAt}')
+        # print(f'session: {session.lastTimeUpdatedAt}')
         if(session.syncing == True):
             ## This is to set a session to no longer get synced as it has left the video currently playing
-            print(room.lastTimeUpdatedAt)
-            print(session.lastTimeUpdatedAt)
             if(room.playing == True and session.playing == False and room.lastTimeUpdatedAt == session.lastTimeUpdatedAt):
                 print('session no longer in sync')
                 session.syncing = False
-            elif((room.playing == True and session.playing == True) and (room.is_paused == False and session.is_paused == True)):
+            elif((room.playing == True and session.playing == True) and (room.is_paused == False and session.is_paused == True) and (room.lastTimeUpdatedAt == session.lastTimeUpdatedAt)):
                 room.is_paused = True
+                room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+            elif((room.playing == True and session.playing == True) and (room.is_paused == True and session.is_paused == False) and (room.lastTimeUpdatedAt == session.lastTimeUpdatedAt)):
+                room.is_paused = False
+                room.lastTimeUpdatedAt = newlastTimeUpdatedAt
         else:
             ## This is for when a session start playing a different video from the room, this will update the room
             if(room.playing == True and session.playing == True and room.item_id != session.item_id):
@@ -332,6 +337,8 @@ def updateRoom(room, active_room_sessions):
         room.item_id = None
         room.ticks = None
         room.is_paused = True
+        for session in active_room_sessions:
+            session.syncing = True
     
     room.lastTimeUpdatedAt = newlastTimeUpdatedAt
     db.session.commit()
@@ -352,19 +359,26 @@ def sync_cycle():
         print(sessions)
         for session in sessions:
             if(session.syncing == True):
+                # print(f'{room.is_paused} - {room.playing}')
+                # print(f'{session.is_paused} - {session.playing}')
                 ## If the room is currently has a video playing and the user doesn't
                 ## Or if the room and user doesn't have the same video playing
                 if((room.playing == True) and (session.playing == False or room.item_id != session.item_id)):
                     print("FOLLOWER NEEDS TO START PLAYING")
                     sendRoomCommand(room,sessions,'Pause')
-                    app.apscheduler.add_job(func=sync, trigger='date', args=[room,session], id="Sync "+session.session_id)
-                    session.lastTimeUpdatedAt = room.lastTimeUpdatedAt
-                    db.session.commit()
-                    ## This is for when the leader pauses and forces the follower to pause
-                    if((room.playing == True and session.playing == True) and (room.is_paused == True and session.is_paused == False)):
-                        print("PAUSing all followers")
-                        # sendRoomCommand(room,sessions,'Pause')
-                        # db.session.commit()
+                    app.apscheduler.add_job(func=sync, trigger='date', args=[room.ticks,room.item_id,session.session_id,session], id="Sync "+session.session_id)
+                    # session.lastTimeUpdatedAt = room.lastTimeUpdatedAt
+                    # db.session.commit()
+                ##  
+                if((room.playing == True and session.playing == True) and (room.is_paused == True and session.is_paused == False)):
+                    print("Pausing all followers")
+                    sendRoomCommand(room,sessions,'Pause')
+                    # db.session.commit()
+                ##
+                if((room.playing == True and session.playing == True) and (room.is_paused == False and session.is_paused == True)):
+                    print("Resuming all followers")
+                    sendRoomCommand(room,sessions,'Unpause')
+                    # db.session.commit()
             ## For the users that left the syncing, but are still in the room
 
             
@@ -429,19 +443,20 @@ def check_sync(follow_session, leader_session):
     drift = (follow_session/10000000) - (leader_session/10000000)
     return drift
 
-def sync(room, follow_session):
-    target = room.ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
-    set_playtime(follow_session.session_id, target, room.item_id)
+def sync(room_ticks, room_item, follow_session_id, follow_session):
+    target = room_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
+    set_playtime(follow_session_id, target, room_item)
 
     print("PAUSING")
     end = time.time() + 3 ## Adding 3 seconds to the current time
     while((time.time() < end) or (follow_session.ticks == None)):
-        send_command(follow_session.session_id, "Pause")
+        send_command(follow_session_id, "Pause")
         time.sleep(0.5)
-        send_command(follow_session.session_id, "Pause")
+        send_command(follow_session_id, "Pause")
         time.sleep(0.5)
-
-    db.session.commit()
+        with app.app_context():
+            follow_session = db.session.query(Session).filter_by(session_id=follow_session_id).first()
+    # db.session.commit()
 
 # def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
 #     target = leader_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
