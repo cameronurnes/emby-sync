@@ -6,6 +6,7 @@ from app.forms import *
 from flask_login import current_user, login_user, logout_user, login_required
 from app.models import Session
 from app.models import User
+from app.models import Room
 from werkzeug.urls import url_parse
 from app.functions import *
 
@@ -13,13 +14,24 @@ from app.functions import *
 @login_required
 def index():
     update_or_create_sessions()
-    sessions_blob = Session.query.all()
-    room_list = [(i.room, i.room+get_room_leader(i.room)) for i in sessions_blob if i.room != None]
-    room_list = list(set(room_list))
+    rooms = Room.query.all()
+    room_list = [room.roomname for room in rooms]
     form_list = [(i.session_id, i.device_name+" - "+i.client_name+" - "+i.ip_address+get_room_name(i)) for i in getSessionList() if (i.is_stale == False) and (i.device_name != 'Emby Sync')]
     form = SessionList()
     form.room_selection.choices = room_list
     form.session_id.choices = form_list
+
+
+    # sessions_blob = Session.query.all()
+    # room_list = [(i.room, i.room+get_room_leader(i.room)) for i in sessions_blob if i.room != None]
+    # print('=-----asdfasdfasdf')
+    # print(room_list)
+    # room_list = list(set(room_list))
+    # form_list = [(i.session_id, i.device_name+" - "+i.client_name+" - "+i.ip_address+get_room_name(i)) for i in getSessionList() if (i.is_stale == False) and (i.device_name != 'Emby Sync')]
+    # form = SessionList()
+    # form.room_selection.choices = room_list
+    # form.session_id.choices = form_list
+
     if form.validate_on_submit():
 
         ## When clicked on "Join Room"
