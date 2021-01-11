@@ -21,11 +21,6 @@ bootstrap = Bootstrap(app)
 INTERVAL = 3
 
 from app.functions import * 
-def signal_handler(signal, frame):
-    # end_session()
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
 
 app.apscheduler.add_job(func=sync_cycle, trigger='interval', seconds=INTERVAL, id='sync_cycle')
 

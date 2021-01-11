@@ -10,7 +10,9 @@ import time
 from app import app
 from app import db
 from app import functions
-from app.models import User, Session
+from app.models import Session
+from app.models import User
+from app.models import Room
 from flask_login import current_user
 
 def check_password(username, password):
@@ -18,7 +20,7 @@ def check_password(username, password):
     headers = {
         'accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Emby-Client': platform.system(),
+        'X-Emby-Client': platform.system(), 
         'X-Emby-Client-Version': '0.1',
         'X-Emby-Device-Id': ''.join(random.choices(string.ascii_uppercase + string.digits, k = 24)),
         'X-Emby-Device-Name': 'Emby Sync'
@@ -72,8 +74,8 @@ def end_session():
         'X-Emby-Client': platform.system(),
         'X-Emby-Client-Version': '0.1',
         'X-Emby-Device-Id': current_user.device_id,
-        'X-Emby-Device-Name': 'Emby Sync',
-        'X-Emby-Token': current_user.access_key
+        'X-Emby-Device-Name': 'Emby Sync'
+        # 'X-Emby-Token': current_user.access_key
     }
     response = requests.post(url, headers=headers)
     if response.status_code == 200:
@@ -131,12 +133,18 @@ def printJsonResponce(responce):
 
 def update_or_create_sessions():
     ## Just for the Emby Sync user aka the bot
-    emby_session = db.session.query(Session).filter_by(device_id='session-sync').all()
-    for z in emby_session:
-        try:
-            set_room(app.config['DEFAULT_ROOM'], z.session_id)
-        except KeyError:
-            continue
+    bot_session = db.session.query(Session).filter_by(device_id='session-sync').first()
+    try:
+        set_room(app.config['DEFAULT_ROOM'], bot_session.session_id)
+    except KeyError:
+        pass
+
+    # emby_session = db.session.query(Session).filter_by(device_id='session-sync').all()
+    # for z in emby_session:
+    #     try:
+    #         set_room(app.config['DEFAULT_ROOM'], z.session_id)
+    #     except KeyError:
+    #         pass
 
     response_json = getSessionJson()
 
@@ -146,43 +154,52 @@ def update_or_create_sessions():
             emby_session = db.session.query(Session).filter_by(session_id=z['Id']).first()
             date_time_obj = datetime.datetime.fromisoformat(z['LastActivityDate'][:-2])
             ip_obj = z['RemoteEndPoint']
-            if stale_calc(date_time_obj, 300):
-                continue
+            # if stale_calc(date_time_obj, 300):
+            #     pass
             if emby_session:
                 emby_session.timestamp = date_time_obj
                 emby_session.ip_address = ip_obj
-                db.session.commit()
+                # db.session.commit()
                 if 'NowPlayingItem' in z:
                     emby_session.playing = True
                     emby_session.item_id = z['NowPlayingItem']['Id']
                     emby_session.ticks = z['PlayState']['PositionTicks']
                     emby_session.is_paused = z['PlayState']['IsPaused']
-                    db.session.commit()
+                    if(emby_session.room_id):
+                        room = db.session.query(Room).filter_by(id=emby_session.room_id).first()
+                        if(room.playing == False):
+                            room.playing = True
+                            room.item_id = z['NowPlayingItem']['Id']
+                            room.ticks = z['PlayState']['PositionTicks']
+                            room.is_paused = z['PlayState']['IsPaused']
+                            room.lastTimeUpdatedAt = datetime.datetime.now()
+                    # db.session.commit()
                 else:
                     emby_session.playing = False
                     emby_session.item_id = None
                     emby_session.ticks = None
                     emby_session.is_paused = z['PlayState']['IsPaused']
-                    db.session.commit()
+                    # db.session.commit()
             else:
                 if z['DeviceId'] != 'session-sync':
+                    print("new session user")
                     newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'], ip_address=ip_obj)
                     db.session.add(newsession)
-                    db.session.commit()
-
+                    # db.session.commit()
                 else:
                     newsession = Session(session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'], ip_address=ip_obj)
                     db.session.add(newsession)
-                    db.session.commit()
-
+                    # db.session.commit()
+            db.session.commit()
             active_users.append(z['Id'])
 
         except KeyError:
-            continue
+            pass
     
     return active_users
 
 def set_leader(room_name, emby_session_id):
+    print("set_leader")
     emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
     if emby_session:
         emby_session.leader = False
@@ -193,26 +210,59 @@ def set_leader(room_name, emby_session_id):
         db.session.commit()
     return True
 
-def set_room(room_name, emby_session_id):
-    emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
-    if emby_session:
-        emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
-        emby_session.room = room_name
-        emby_session.leader = False
-        db.session.commit()
+def create_room(room_name):
+    print("creating new room")
+    current_time = datetime.datetime.now()
+    new_room = Room(roomname=room_name,lastTimeUpdatedAt=current_time)
+    db.session.add(new_room)
+    db.session.commit()
 
-        ## For when a new person joins that isn't the leader
-        if(emby_session.device_id != 'session-sync'):
-            send_command(emby_session.session_id, "Message")
+def set_room(room_name, emby_session_id):
+    room = db.session.query(Room).filter_by(roomname=room_name).first()
+    if(not room):
+        create_room(room_name)
+    emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+    room = db.session.query(Room).filter_by(roomname=room_name).first()
+    emby_session.room_id = room.id
+    emby_session.syncing = True
+    emby_session.lastTimeUpdatedAt = datetime.datetime.now()
+    db.session.commit()
+    
+    ## if room is playing, set newly joined to session stuff
+        
+    ## For when a new person joins that isn't the leader
+    if(emby_session.device_id != 'session-sync'):
+        send_command(emby_session.session_id, "Message")
 
     ## No leader exists
-    else:
-        emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
-        emby_session.room = room_name
-        if (emby_session.device_name != 'Emby Sync'):
-            emby_session.leader = True
-        db.session.commit()
+    # else:
+    #     emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+    #     emby_session.room = room_name
+    #     if (emby_session.device_name != 'Emby Sync'):
+    #         emby_session.leader = True
+    #     db.session.commit()
     return True
+
+# def set_room(room_name, emby_session_id):
+#     emby_session = db.session.query(Session).filter_by(room=room_name, leader=True).first()
+#     if emby_session:
+#         emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+#         emby_session.room = room_name
+#         emby_session.leader = False
+#         db.session.commit()
+
+#         ## For when a new person joins that isn't the leader
+#         if(emby_session.device_id != 'session-sync'):
+#             send_command(emby_session.session_id, "Message")
+
+#     ## No leader exists
+#     else:
+#         emby_session = db.session.query(Session).filter_by(session_id=emby_session_id).first()
+#         emby_session.room = room_name
+#         if (emby_session.device_name != 'Emby Sync'):
+#             emby_session.leader = True
+#         db.session.commit()
+#     return True
 
 def stale_check(in_sesh):
     if (in_sesh.is_stale == False) and (stale_calc(in_sesh.timestamp, 300)):
@@ -244,92 +294,203 @@ def session_cleanup():
     Session.query.filter(Session.is_dead==True).delete()
     db.session.commit()
 
+def sendRoomCommand(room, active_room_sessions, command):
+    print(f'Issuing command: {command} for room: {room.roomname}')
+    for session in active_room_sessions:
+        send_command(session.session_id,command)
+
+def updateRoom(room, active_room_sessions):
+    # print(f'Updating information for room: {room.roomname}')
+
+    newlastTimeUpdatedAt = datetime.datetime.now()
+    checkForAnyUserPlaying = False
+    for session in active_room_sessions:
+        # print(f'room: {room.lastTimeUpdatedAt}')
+        # print(f'session: {session.lastTimeUpdatedAt}')
+        if(session.syncing == True):
+            ## This is to set a session to no longer get synced as it has left the video currently playing
+            if(room.playing == True and session.playing == False and room.lastTimeUpdatedAt == session.lastTimeUpdatedAt):
+                print('session no longer in sync')
+                session.syncing = False
+            elif((room.playing == True and session.playing == True) and (room.is_paused == False and session.is_paused == True) and (room.lastTimeUpdatedAt == session.lastTimeUpdatedAt)):
+                room.is_paused = True
+                room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+            elif((room.playing == True and session.playing == True) and (room.is_paused == True and session.is_paused == False) and (room.lastTimeUpdatedAt == session.lastTimeUpdatedAt)):
+                room.is_paused = False
+                room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+        else:
+            ## This is for when a session start playing a different video from the room, this will update the room
+            if(room.playing == True and session.playing == True and room.item_id != session.item_id):
+                print('A user has started a different video while another one was playing')
+                room.item_id = session.item_id
+                room.ticks = session.ticks
+                room.is_paused = session.is_paused
+                room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+                session.syncing = True
+        
+        ## This is used to see if any user is actually currently watching something, else set the
+        ## the room state to nothing
+        if(session.playing == True and checkForAnyUserPlaying == False):
+            checkForAnyUserPlaying = True
+
+        session.lastTimeUpdatedAt = newlastTimeUpdatedAt
+        db.session.commit()
+        
+
+    ## No user is playing anything, set room state to nothing
+    if(not checkForAnyUserPlaying):
+        print('No user was playing anything, setting room to nothing')
+        room.playing = False
+        room.item_id = None
+        room.ticks = None
+        room.is_paused = True
+        for session in active_room_sessions:
+            session.syncing = True
+    
+    room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+    db.session.commit()
+
 def sync_cycle():
+    start = time.time()
     active_users = update_or_create_sessions()
     full_session_list = Session.query.all()
-
     ## This will only get the users that are actually connected to the Emby server
-    current_session_list = [session for session in full_session_list if(session.session_id in active_users)]
-    for z in current_session_list:
-        # stale_check(z)
+    active_session_list = [session for session in full_session_list if(session.session_id in active_users)]
+    
+    rooms = Room.query.all()
+    for room in rooms:
+        # sessions = Session.query.filter(Session.room_id == room.id, Session.device_id != 'session-sync').all()
+        sessions = [session for session in active_session_list if(session.room_id == room.id and session.device_id != 'session-sync')]
+        updateRoom(room,sessions)
+        # print(sessions)
+        for session in sessions:
+            if(session.syncing == True):
+                # print(f'{room.is_paused} - {room.playing}')
+                # print(f'{session.is_paused} - {session.playing}')
+                ## If the room is currently has a video playing and the user doesn't
+                ## Or if the room and user doesn't have the same video playing
+                if((room.playing == True) and (session.playing == False or room.item_id != session.item_id) and (session.ticks != 0)):
+                    print("FOLLOWER NEEDS TO START PLAYING")
+                    sendRoomCommand(room,sessions,'Pause')
+                    app.apscheduler.add_job(func=sync, trigger='date', args=[room.ticks,room.item_id,session.session_id,session], id="Sync "+session.session_id)
+                    # session.lastTimeUpdatedAt = room.lastTimeUpdatedAt
+                    # db.session.commit()
+                ##  
+                if((room.playing == True and session.playing == True) and (room.is_paused == True and session.is_paused == False)):
+                    print("Pausing all followers")
+                    sendRoomCommand(room,sessions,'Pause')
+                    # db.session.commit()
+                ##
+                if((room.playing == True and session.playing == True) and (room.is_paused == False and session.is_paused == True)):
+                    print("Resuming all followers")
+                    sendRoomCommand(room,sessions,'Unpause')
+                    # db.session.commit()
+            ## For the users that left the syncing, but are still in the room
+    end = time.time()
+    print(f'Round trip: {end - start}')
+            
+# def sync_cycle():
+#     active_users = update_or_create_sessions()
+#     full_session_list = Session.query.all()
+    # active_session_list = [session for session in full_session_list if(session.session_id in active_users)]
 
-        ## This is just for the leader/emby-sync, so nothing happens
-        if (z.leader == True) or (z.device_id == 'session-sync'):
-            continue
-        ## This is just for the followers
-        else:
-            if (z.room != None) and (z.is_stale == False):
-                leader_session = db.session.query(Session).filter_by(room=z.room, leader=True).first()
-                session_user = db.session.query(User).filter_by(emby_id=z.user_id).first()
+    # for z in active_session_list:
+    #     # stale_check(z)
+
+    #     ## This is just for the leader/emby-sync, so nothing happens
+    #     if(z.device_id == 'session-sync'):
+    #         pass
+    #     # if (z.leader == True) or (z.device_id == 'session-sync'):
+    #     #     pass
+    #     ## This is just for the followers
+    #     else:
+    #         if (z.room != None) and (z.is_stale == False):
+    #             leader_session = db.session.query(Session).filter_by(room=z.room, leader=True).first()
+    #             # session_user = db.session.query(User).filter_by(emby_id=z.user_id).first()
                     
-                if leader_session:
+    #             if leader_session:
 
-                    ## Leader are Follower are not currently in any video
-                    if(leader_session.playing == False) and (z.playing == False):
-                        pass
-                    ## This is for when the follower tries to start playing when synced to a room. This forces the follower to follow the leader
-                    if(leader_session.playing == False) and (z.playing == True):
-                        print("STOP")
-                        send_command(z.session_id, "Stop")
-                        z.syncing = False
-                        db.session.commit()
-                    ## This is for when the leader pauses and forces the follower to pause
-                    if(leader_session.playing == True) and (leader_session.is_paused == True) and (z.playing == True) and (z.is_paused == False):
-                        print("PAUSE")
-                        send_command(z.session_id, "Pause")
-                        z.syncing = False
-                        db.session.commit()
-                    ## This if for when the leader resumes from a paused state
-                    if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == True) and (z.is_paused == True) and (z.syncing == False):
-                        print("RESUME")
-                        send_command(z.session_id, "Unpause")
-                        z.syncing = True
-                        db.session.commit()
-                    ## This if for when the leader starts playing and the follower is does not have any video loaded
-                    if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == False) and (leader_session.ticks != 0):
-                        print("FOLLOWER NEEDS TO START PLAYING")
-                        send_command(leader_session.session_id,"Pause")
-                        app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
-                        z.syncing = True
-                        db.session.commit()
-                    if(leader_session.playing == True) and (z.playing == True) and (leader_session.ticks != 0):
-                        sync_drift = check_sync(z.ticks, leader_session.ticks)
-                        print(f"Follower: {z.user_id} {z.device_name} drift: {sync_drift}")
-                        if abs(sync_drift) >= 10:
-                            app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
-                            z.syncing = True
-                            db.session.commit()
-
-def check_sync(follow_session, leader_session):
-    drift = (follow_session/10000000) - (leader_session/10000000)
+    #                 ## Leader are Follower are not currently in any video
+    #                 if(leader_session.playing == False) and (z.playing == False):
+    #                     pass
+    #                 ## This is for when the follower tries to start playing when synced to a room. This forces the follower to follow the leader
+    #                 if(leader_session.playing == False) and (z.playing == True):
+    #                     print("STOP")
+    #                     send_command(z.session_id, "Stop")
+    #                     z.syncing = False
+    #                     db.session.commit()
+    #                 ## This is for when the leader pauses and forces the follower to pause
+    #                 if(leader_session.playing == True) and (leader_session.is_paused == True) and (z.playing == True) and (z.is_paused == False):
+    #                     print("PAUSE")
+    #                     send_command(z.session_id, "Pause")
+    #                     z.syncing = False
+    #                     db.session.commit()
+    #                 ## This if for when the leader resumes from a paused state
+    #                 if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == True) and (z.is_paused == True) and (z.syncing == False):
+    #                     print("RESUME")
+    #                     send_command(z.session_id, "Unpause")
+    #                     z.syncing = True
+    #                     db.session.commit()
+    #                 ## This if for when the leader starts playing and the follower is does not have any video loaded
+    #                 if(leader_session.playing == True) and (leader_session.is_paused == False) and (z.playing == False) and (leader_session.ticks != 0):
+    #                     print("FOLLOWER NEEDS TO START PLAYING")
+    #                     send_command(leader_session.session_id,"Pause")
+    #                     app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
+    #                     z.syncing = True
+    #                     db.session.commit()
+    #                 if(leader_session.playing == True) and (z.playing == True) and (leader_session.ticks != 0):
+    #                     sync_drift = check_sync(z.ticks, leader_session.ticks)
+    #                     print(f"Follower: {z.user_id} {z.device_name} drift: {sync_drift}")
+    #                     if abs(sync_drift) >= 10:
+    #                         app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
+    #                         z.syncing = True
+    #                         db.session.commit()
+    
+def check_sync(session_ticks, room_ticks):
+    drift = (session_ticks/10000000) - (room_ticks/10000000)
     return drift
 
-def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
-    target = leader_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
-    set_playtime(follow_id, target, leader_item)
+def sync(room_ticks, room_item, follow_session_id, follow_session):
+    target = room_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
+    set_playtime(follow_session_id, target, room_item)
 
     print("PAUSING")
     end = time.time() + 3 ## Adding 3 seconds to the current time
-    while((time.time() < end) or (follow_session.ticks == None)):
-        send_command(follow_id, "Pause")
+    while((follow_session.ticks == None)):
+        send_command(follow_session_id, "Pause")
         time.sleep(0.5)
-        send_command(follow_id, "Pause")
+        send_command(follow_session_id, "Pause")
         time.sleep(0.5)
+        with app.app_context():
+            follow_session = db.session.query(Session).filter_by(session_id=follow_session_id).first()
+    # db.session.commit()
 
-    # for i in range(8):
-    #     send_command(follow_id, "Pause")
-    #     time.sleep(0.5)
-    #     send_command(follow_id, "Pause")
-    #     time.sleep(0.5)
+# def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
+#     target = leader_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
+#     set_playtime(follow_id, target, leader_item)
 
-    follow_session.syncing = False
-    db.session.commit()
-    # print("UNPAUSING")
-    # for i in range(2):
-    #     send_command(follow_id, "Unpause")
-    #     time.sleep(0.5)
-    #     send_command(follow_id, "Unpause")
-    #     time.sleep(0.5)
+#     print("PAUSING")
+#     end = time.time() + 3 ## Adding 3 seconds to the current time
+#     while((time.time() < end) or (follow_session.ticks == None)):
+#         send_command(follow_id, "Pause")
+#         time.sleep(0.5)
+#         send_command(follow_id, "Pause")
+#         time.sleep(0.5)
+
+#     # for i in range(8):
+#     #     send_command(follow_id, "Pause")
+#     #     time.sleep(0.5)
+#     #     send_command(follow_id, "Pause")
+#     #     time.sleep(0.5)
+
+#     follow_session.syncing = False
+#     db.session.commit()
+#     # print("UNPAUSING")
+#     # for i in range(2):
+#     #     send_command(follow_id, "Unpause")
+#     #     time.sleep(0.5)
+#     #     send_command(follow_id, "Unpause")
+#     #     time.sleep(0.5)
 
 def set_playtime(session, time, item_id):
     url = '{0}/Sessions/{1}/Playing'.format(app.config['EMBY_SERVER'], session)
@@ -353,6 +514,7 @@ def set_playtime(session, time, item_id):
         print(response.text, flush=True)
         print(response.status_code, flush=True)
 
+## Change the param from taking just the session id to the full session
 def send_command(session, command):
     url = '{0}/Sessions/{1}/Playing/{2}'.format(app.config['EMBY_SERVER'], session, command)
     if(command == 'Message'):
@@ -381,15 +543,22 @@ def send_command(session, command):
 def get_room_leader(room):
     leader_session = db.session.query(Session).filter_by(room=room, leader=True).first()
     if leader_session and leader_session.device_name != 'Emby Connect':
-        leader_user = db.session.query(User).filter_by(emby_id=leader_session.user_id).first()
-        return "  --  Current leader is {0}".format(leader_user.username)
+        # leader_user = db.session.query(User).filter_by(emby_id=leader_session.user_id).first()
+        # return "  --  Current leader is {0}".format(leader_user.username)
+        return "  --  Current leader is "
+
     else:
         return ""
 
 def get_room_name(session):
-    if session.room and session.leader != True:
-        return " -- Synced to {0}".format(session.room)
-    if session.room and session.leader == True:
-        return " -- Leading {0}".format(session.room)
-    else:
-        return " -- Not Synced"
+    room = db.session.query(Room).filter_by(id=session.room_id).first()
+    if(room):
+        return f' -- Synced to {room.roomname}'
+    return ' -- Not Synced'
+
+    # if session.room and session.leader != True:
+    #     return " -- Synced to {0}".format(session.room)
+    # if session.room and session.leader == True:
+    #     return " -- Leading {0}".format(session.room)
+    # else:
+    #     return " -- Not Synced"
