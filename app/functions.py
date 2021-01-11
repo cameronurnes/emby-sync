@@ -350,7 +350,6 @@ def updateRoom(room, active_room_sessions):
     room.lastTimeUpdatedAt = newlastTimeUpdatedAt
     db.session.commit()
 
-
 def sync_cycle():
     start = time.time()
     active_users = update_or_create_sessions()
@@ -446,9 +445,9 @@ def sync_cycle():
     #                         app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
     #                         z.syncing = True
     #                         db.session.commit()
-
-def check_sync(follow_session, leader_session):
-    drift = (follow_session/10000000) - (leader_session/10000000)
+    
+def check_sync(session_ticks, room_ticks):
+    drift = (session_ticks/10000000) - (room_ticks/10000000)
     return drift
 
 def sync(room_ticks, room_item, follow_session_id, follow_session):
