@@ -412,6 +412,7 @@ def sync_cycle():
                     print("FOLLOWER NEEDS TO START PLAYING")
                     room.is_paused = True
                     room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+                    session.syncing = False
                     db.session.commit()
                     sendRoomCommand(room,sessions,'Pause')
                     app.apscheduler.add_job(func=sync, trigger='date', args=[room.ticks,room.item_id,session.session_id,session], id="Sync "+session.session_id)
@@ -436,6 +437,7 @@ def sync_cycle():
                         print('Follower out of sync, syncing with room')
                         room.is_paused = True
                         room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+                        session.syncing = False
                         db.session.commit()
                         sendRoomCommand(room,sessions,'Pause')
                         app.apscheduler.add_job(func=sync, trigger='date', args=[room.ticks,room.item_id,session.session_id,session], id="Sync "+session.session_id)
@@ -508,21 +510,19 @@ def sync(room_ticks, room_item, follow_session_id, follow_session):
     target = room_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
     set_playtime(follow_session_id, target, room_item)
 
-    print("PAUSING")
-    end = time.time() + 3 ## Adding 3 seconds to the current time
-
     ## This is a do-while loop
     while(True):
-        send_command(follow_session_id, "Pause")
-        time.sleep(0.5)
+        # print("PAUSING")
         send_command(follow_session_id, "Pause")
         time.sleep(0.5)
         with app.app_context():
             follow_session = db.session.query(Session).filter_by(session_id=follow_session_id).first()
-            if(follow_session.ticks != None):
+            if(follow_session.ticks != None and (follow_session.ticks >= target or follow_session.ticks == 0)):
+                follow_session.syncing = True
+                db.session.commit()
                 break
-        
-    # db.session.commit()
+    send_command(follow_session_id, "Pause")
+    
 
 # def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
 #     target = leader_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
