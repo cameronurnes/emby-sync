@@ -7,7 +7,7 @@ import json
 import string
 import threading
 import time
-from app import app
+from app import INTERVAL, app
 from app import db
 from app import functions
 from app.models import Session
@@ -209,6 +209,8 @@ def update_or_create_sessions():
             active_users.append(z['Id'])
 
         except KeyError:
+            print("ERRROR")
+            exit()
             pass
     
     return active_users
@@ -377,7 +379,7 @@ def updateRoom(room, active_room_sessions):
 
     ## No user is playing anything, set room state to nothing
     if(not checkForAnyUserPlaying):
-        print('No user was playing anything, setting room to nothing')
+        # print('No user was playing anything, setting room to nothing')
         room.playing = False
         room.item_id = None
         room.ticks = None
@@ -443,7 +445,7 @@ def sync_cycle():
                         app.apscheduler.add_job(func=sync, trigger='date', args=[room.ticks,room.item_id,session.session_id,session], id="Sync "+session.session_id)
                         # break
     end = time.time()
-    # print(f'Round trip: {end - start}')
+    print(f'Round trip: {end - start}')
             
 # def sync_cycle():
 #     active_users = update_or_create_sessions()
@@ -507,21 +509,24 @@ def check_sync(session_ticks, room_ticks):
     return drift
 
 def sync(room_ticks, room_item, follow_session_id, follow_session):
-    target = room_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
+    target = room_ticks + int(INTERVAL*10000000) # Load x seconds ahead to give user time to buffer
     set_playtime(follow_session_id, target, room_item)
 
     ## This is a do-while loop
     while(True):
-        # print("PAUSING")
+        print("PAUSING")
         send_command(follow_session_id, "Pause")
         time.sleep(0.5)
         with app.app_context():
             follow_session = db.session.query(Session).filter_by(session_id=follow_session_id).first()
             if(follow_session.ticks != None and (follow_session.ticks >= target or follow_session.ticks == 0)):
-                follow_session.syncing = True
-                db.session.commit()
                 break
+            
     send_command(follow_session_id, "Pause")
+    with app.app_context():
+        follow_session = db.session.query(Session).filter_by(session_id=follow_session_id).first()
+        follow_session.syncing = True
+        db.session.commit()
     
 
 # def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
