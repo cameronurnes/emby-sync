@@ -424,21 +424,20 @@ def sync_cycle():
                     print("Pausing all followers")
                     # room.lastTimeUpdatedAt = newlastTimeUpdatedAt
                     session.lastTimeUpdatedAt = newlastTimeUpdatedAt
+                    session.syncing = False
                     db.session.commit()
-                    send_command(session.session_id,'Pause')
+                    app.apscheduler.add_job(func=issuePause, trigger='date', args=[session.session_id], id="Command "+session.session_id)    
+                    # send_command(session.session_id,'Pause')
                     # sendRoomCommand(room,sessions,'Pause')
                 ##
                 if((room.playing == True and session.playing == True) and (room.is_paused == False and session.is_paused == True)):
                     print("Resuming all followers")
                     room.lastTimeUpdatedAt = newlastTimeUpdatedAt
                     session.lastTimeUpdatedAt = newlastTimeUpdatedAt
+                    session.syncing = False
                     db.session.commit()
-                    send_command(session.session_id,'Unpause')
-                    # while(True):
-                    #     if(session.lastTimeUpdatedAt > newlastTimeUpdatedAt):
-                    #         session.syncing = True
-                    #         db.session.commit()
-                    #         break
+                    app.apscheduler.add_job(func=issueResume, trigger='date', args=[session.session_id], id="Command "+session.session_id)    
+                    # send_command(session.session_id,'Unpause')
                     # sendRoomCommand(room,sessions,'Unpause')
                 if((room.playing == True and session.playing == True) and (room.item_id == session.item_id and session.ticks != 0)):
                     sync_drift = check_sync(session.ticks, room.ticks)
@@ -630,6 +629,28 @@ def syncTicks(room_ticks, room_lastTimeUpdatedAt, follow_session_id, follow_sess
                 print('Session is now synced with server')
                 break
     
+def issuePause(session_id):
+    send_command(session_id,'Pause')
+
+    while(True):
+        with app.app_context():
+            follow_session = db.session.query(Session).filter_by(session_id=session_id).first()
+            if(follow_session.is_paused == True):
+                follow_session.syncing = True
+                db.session.commit()
+                break
+
+def issueResume(session_id):
+    send_command(session_id,'Unpause')
+
+    while(True):
+        with app.app_context():
+            follow_session = db.session.query(Session).filter_by(session_id=session_id).first()
+            if(follow_session.is_paused == False):
+                follow_session.syncing = True
+                db.session.commit()
+                break
+
 
 # def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
 #     target = leader_ticks + (3*10000000) # Load 3 seconds ahead to give user time to buffer
