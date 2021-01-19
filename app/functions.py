@@ -382,6 +382,7 @@ def updateRoom(room, active_room_sessions):
         room.is_paused = True
         for session in active_room_sessions:
             session.syncing = True
+            session.loading = False
         room.lastTimeUpdatedAt = newlastTimeUpdatedAt
         
     db.session.commit()
@@ -439,7 +440,7 @@ def sync_cycle():
                     #         db.session.commit()
                     #         break
                     # sendRoomCommand(room,sessions,'Unpause')
-                if((room.playing == True and session.playing == True) and (session.ticks != 0)):
+                if((room.playing == True and session.playing == True) and (room.item_id == session.item_id and session.ticks != 0)):
                     sync_drift = check_sync(session.ticks, room.ticks)
                     localTime = session.lastTimeUpdatedAt - datetime.timedelta(seconds=sync_drift)
                     timeDifference = localTime - room.lastTimeUpdatedAt
