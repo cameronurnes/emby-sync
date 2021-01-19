@@ -354,6 +354,7 @@ def updateRoom(room, active_room_sessions):
                     room.is_paused = True
                     room.ticks = session.ticks
                     room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+                    
         else:
             ## This is for when a session start playing a different video from the room, this will update the room
             if(room.playing == True and session.playing == True and room.item_id != session.item_id):
@@ -420,7 +421,7 @@ def sync_cycle():
                 ## 
                 if((room.playing == True and session.playing == True) and (room.is_paused == True and session.is_paused == False)):
                     print("Pausing all followers")
-                    room.lastTimeUpdatedAt = newlastTimeUpdatedAt
+                    # room.lastTimeUpdatedAt = newlastTimeUpdatedAt
                     session.lastTimeUpdatedAt = newlastTimeUpdatedAt
                     db.session.commit()
                     send_command(session.session_id,'Pause')
@@ -601,17 +602,28 @@ def sync(room_ticks, room_item, follow_session_id, follow_session):
 def syncTicks(room_ticks, room_lastTimeUpdatedAt, follow_session_id, follow_session):
     target = room_ticks + int(INTERVAL*10000000) # Load x seconds ahead to give user time to buffer
     setTickPosition(follow_session_id, target)
+    targetLower = target - 10000 # I used 10000 ticks as this value is equal to .001 of a second. 
+    targetUpper = target + 10000 # I used 10000 ticks as this value is equal to .001 of a second. 
+    
     with app.app_context():
         follow_session = db.session.query(Session).filter_by(session_id=follow_session_id).first()
         follow_session.loading = False
         db.session.commit()
-    
     # time.sleep(INTERVAL/2)
     ## This is a do-while loop
     while(True):
         with app.app_context():
             follow_session = db.session.query(Session).filter_by(session_id=follow_session_id).first()
-            if(follow_session.ticks != None and (follow_session.ticks == target or follow_session.ticks == 0) and follow_session.lastTimeUpdatedAt > room_lastTimeUpdatedAt):
+            # if(follow_session.ticks != None):
+            #     print('ticks are not none')
+            # if(follow_session.ticks >= targetLower and follow_session.ticks <= targetUpper):
+            #     print('ticks are target')
+            # if follow_session.ticks == 0:
+            #     print('ticks are 0')
+            # if(follow_session.lastTimeUpdatedAt > room_lastTimeUpdatedAt):
+            #     print('session is updated more than room')
+
+            if(follow_session.ticks != None and ((follow_session.ticks >= targetLower and follow_session.ticks <= targetUpper) or follow_session.ticks == 0) and follow_session.lastTimeUpdatedAt > room_lastTimeUpdatedAt):
                 follow_session.syncing = True
                 db.session.commit()
                 print('Session is now synced with server')
