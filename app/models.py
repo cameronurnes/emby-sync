@@ -31,7 +31,7 @@ class Session(db.Model):
     syncing = db.Column(db.Boolean, default=False)
     loading = db.Column(db.Boolean, default=False)
     leader = db.Column(db.Boolean, default=False)
-    item_id = db.Column(db.Integer) ## Maybe change to str to match json
+    item_id = db.Column(db.Integer, default=None) ## Maybe change to str to match json
     device_name = db.Column(db.String(128))
     client_name = db.Column(db.String(128))
     is_paused = db.Column(db.Boolean, default=False)
@@ -49,9 +49,8 @@ class Session(db.Model):
 class Room(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     roomname = db.Column(db.String(128))
-    # syncing = db.Column(db.Boolean, default=False)
     ticks = db.Column(db.BigInteger, default=0)
-    item_id = db.Column(db.Integer)
+    item_id = db.Column(db.Integer, default=None)
     is_paused = db.Column(db.Boolean, default=False)
     playing = db.Column(db.Boolean, default=False)
     lastTimeUpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)

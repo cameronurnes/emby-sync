@@ -15,6 +15,18 @@ from app.models import User
 from app.models import Room
 from flask_login import current_user
 
+
+def initRun():
+    allSessions = Session.query.all()
+    for session in allSessions:
+        session.syncing = True
+        session.loading = False
+    
+    # allRooms = Room.query.all()
+    # for room in allRooms:
+    #     emptyRoom(room)
+    db.session.commit()   
+
 def check_password(username, password):
     url = '{0}/Users/Authenticatebyname'.format(app.config['EMBY_SERVER'])
     headers = {
@@ -222,6 +234,13 @@ def set_leader(room_name, emby_session_id):
         db.session.commit()
     return True
 
+def emptyRoom(room):
+    room.ticks = 0
+    room.item_id = None
+    room.is_paused = False
+    room.playing = False
+    db.session.commit()
+
 def create_room(room_name):
     print("creating new room")
     current_time = datetime.datetime.now()
@@ -238,14 +257,13 @@ def set_room(room_name, emby_session_id):
     emby_session.room_id = room.id
     emby_session.syncing = True
     emby_session.loading = False
-    emby_session.lastTimeUpdatedAt = datetime.datetime.now()
+    # emby_session.lastTimeUpdatedAt = datetime.datetime.now()
     db.session.commit()
     
-    ## if room is playing, set newly joined to session stuff
-        
     ## For when a new person joins that isn't the leader
     if(emby_session.device_id != 'session-sync'):
-        send_command(emby_session.session_id, "Message")
+        pass
+        # send_command(emby_session.session_id, "Message")
 
     ## No leader exists
     # else:
@@ -317,6 +335,10 @@ def sendRoomCommand(room, active_room_sessions, command):
 
 def updateRoom(room, active_room_sessions):
     # print(f'Updating information for room: {room.roomname}')
+    if(len(active_room_sessions) == 0):
+        # print(f'{room.roomname} is empty')
+        emptyRoom(room)
+        return 0
 
     newlastTimeUpdatedAt = datetime.datetime.now()
     checkForAnyUserPlaying = False
@@ -386,6 +408,7 @@ def updateRoom(room, active_room_sessions):
         room.lastTimeUpdatedAt = newlastTimeUpdatedAt
         
     db.session.commit()
+    return 1
 
 def sync_cycle():
     print('==========================================================')
@@ -399,8 +422,11 @@ def sync_cycle():
     for room in rooms:
         # sessions = Session.query.filter(Session.room_id == room.id, Session.device_id != 'session-sync').all()
         sessions = [session for session in active_session_list if(session.room_id == room.id and session.device_id != 'session-sync')]
-        updateRoom(room,sessions)
-        # print(sessions)
+        
+        ## This means that the room is completely empty, skip it
+        if(updateRoom(room,sessions) == 0):
+            break
+
         newlastTimeUpdatedAt = datetime.datetime.now()
         for session in sessions:
             if(session.syncing == True):
