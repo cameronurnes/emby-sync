@@ -7,6 +7,8 @@ from flask_apscheduler import APScheduler
 from flask_bootstrap import Bootstrap
 import signal
 import sys
+import logging
+
 
 app = Flask(__name__)
 scheduler = APScheduler()
@@ -18,10 +20,13 @@ migrate = Migrate(app, db)
 login = LoginManager(app)
 login.login_view = 'login'
 bootstrap = Bootstrap(app)
-INTERVAL = 3
+INTERVAL = .05
 
-from app.functions import * 
+## This need to be placed here
+from app.functions import *
 
+initRun()
+logging.getLogger().setLevel(logging.ERROR)
 app.apscheduler.add_job(func=sync_cycle, trigger='interval', seconds=INTERVAL, id='sync_cycle')
 
 ## Needed to run application
