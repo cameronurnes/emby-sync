@@ -1,4 +1,4 @@
-# emby-sync
+# Emby-Party
 
 
 `docker run --name emby-sync -e EMBY_SERVER='<emby_url>' -e SECRET_KEY='<emby_api_key>' -p 5000:5000 lastelement21/emby-sync:latest`
