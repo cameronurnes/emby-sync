@@ -29,9 +29,8 @@ class Session(db.Model):
     ticks = db.Column(db.BigInteger, default=0)
     room = db.Column(db.String(128))
     syncing = db.Column(db.Boolean, default=False)
-    loading = db.Column(db.Boolean, default=False)
     leader = db.Column(db.Boolean, default=False)
-    item_id = db.Column(db.Integer, default=None) ## Maybe change to str to match json
+    item_id = db.Column(db.Integer)
     device_name = db.Column(db.String(128))
     client_name = db.Column(db.String(128))
     is_paused = db.Column(db.Boolean, default=False)
@@ -39,22 +38,9 @@ class Session(db.Model):
     is_stale = db.Column(db.Boolean, default=False)
     is_dead = db.Column(db.Boolean, default=False)
     device_id = db.Column(db.String(32))
-    ip_address = db.Column(db.String(32))
-    lastTimeUpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
-    room_id = db.Column(db.Integer, db.ForeignKey('room.id'))
 
     def __repr__(self):
         return '<Session {}>'.format(self.session_id)
-
-class Room(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    roomname = db.Column(db.String(128))
-    ticks = db.Column(db.BigInteger, default=0)
-    item_id = db.Column(db.Integer, default=None)
-    is_paused = db.Column(db.Boolean, default=False)
-    playing = db.Column(db.Boolean, default=False)
-    lastTimeUpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
-
 
 @login.user_loader
 def load_user(id):
