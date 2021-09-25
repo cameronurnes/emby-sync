@@ -194,18 +194,27 @@ def sync_cycle():
                         z.syncing = False
                         db.session.commit()
                     if (leader_session.playing == True) and (z.playing == True) and (leader_session.is_paused == True):
+                        # Leader is playing, but paused, session is currently playing
+                        # Pause and seek session to leader
+                        #TODO: this should ensure the follower is playing the same item as the leader
                         send_command(z.session_id, "Pause")
+                        # Now sync
+                        set_playtime(z.session_id, time=leader_session.ticks)
                         z.syncing = False
                         db.session.commit()
                     if (leader_session.playing == True) and (z.playing == False) and (leader_session.ticks != 0):
-                        app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
+                        # Leader is playing, this session is not yet playing
+                        # Sync session to leader
+                        app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
                         z.syncing = True
                         db.session.commit()
                     if (leader_session.playing == True) and (z.playing == True) and (leader_session.ticks != 0):
+                        #TODO: if ensured the follower is playing the same item as the leader, seek would be more efficient
+                        # than sync
                         sync_drift = check_sync(z.ticks, leader_session.ticks)
                         print(session_user.username+" "+z.device_name+" sync: "+str(sync_drift))
                         if sync_drift >= 8:
-                            app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
+                            app.apscheduler.add_job(func=sync, trigger='date', args=[z, z.session_id, leader_session.ticks, leader_session.item_id], id="Sync "+z.session_id+" "+leader_session.session_id)
                             z.syncing = True
                             db.session.commit()
 
@@ -213,7 +222,12 @@ def check_sync(follow_session, leader_session):
     drift = abs((follow_session/10000000) - (leader_session/10000000))
     return drift
 
-def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
+def sync(follow_session, follow_id, leader_ticks, leader_item):
+    """
+    Forces the following session to start playing the leaders item
+    at the leaders tick.
+    Does a few pauses and unpauses
+    """
     target = leader_ticks + (10*10000000)
     set_playtime(follow_id, target, leader_item)
     for i in range(8):
@@ -225,7 +239,10 @@ def sync(follow_session, follow_id, leader_session, leader_ticks, leader_item):
         send_command(follow_id, "Unpause")
         time.sleep(1)
 
-def set_playtime(session, time, item_id):
+def start_play(session: int, time: int, item_id: int) -> bool:
+    """
+    Tell the session client to play the given item id at the given time
+    """
     url = '{0}/Sessions/{1}/Playing'.format(app.config['EMBY_SERVER'], session)
     headers = {
         'accept': 'application/json',
@@ -242,10 +259,42 @@ def set_playtime(session, time, item_id):
     }
     response = requests.post(url, headers=headers, params=params)
     if response.status_code == 204:
-        return 0
+        return True
     else:
         print(response.text, flush=True)
         print(response.status_code, flush=True)
+        return False
+
+
+def set_playtime(session: int, time: int) -> bool:
+    """
+    Tell the session to jump (seek) to the already playing item
+    Args:
+        session: session id
+        time: time in ticks to seek
+    Returns:
+        result: True if successful, False if not
+    """
+    url = '{0}/Sessions/{1}/Playing/Seek'.format(app.config['EMBY_SERVER'], session)
+    headers = {
+        'accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Emby-Client': platform.system(),
+        'X-Emby-Client-Version': '0.1',
+        'X-Emby-Device-Id': 'session-sync',
+        'X-Emby-Device-Name': 'Emby Sync',
+        'X-Emby-Token': app.config['SECRET_KEY']
+    }
+    params = {
+        'SeekPositionTicks': time
+    }
+    response = requests.post(url, headers=headers, params=params)
+    if response.status_code == 204:
+        return True
+    else:
+        print(response.text, flush=True)
+        print(response.status_code, flush=True)
+        return False
 
 def send_command(session, command):
     url = '{0}/Sessions/{1}/Playing/{2}'.format(app.config['EMBY_SERVER'], session, command)
@@ -260,10 +309,12 @@ def send_command(session, command):
     }
     response = requests.post(url, headers=headers)
     if response.status_code == 204:
-        return 0
+        return True
     else:
         print(response.text, flush=True)
         print(response.status_code, flush=True)
+        return False
+
 
 def get_room_leader(room):
     leader_session = db.session.query(Session).filter_by(room=room, leader=True).first()
