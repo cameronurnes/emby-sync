@@ -1,5 +1,6 @@
 # emby-sync
 
+Running the server in docker:
 
 `docker run --name emby-sync -e EMBY_SERVER='<emby_url>' -e SECRET_KEY='<emby_api_key>' -p 5000:5000 lastelement21/emby-sync:latest`
 
@@ -14,6 +15,9 @@ SECRET_KEY: This should be an API key for your emby server.
 EMBY_SERVER: This should be the URL used to connect to your server.
 
 (Optional) DEFAULT_ROOM: A room name which always exists. Default is 'Bacon Bar'
+
+(Optional) INTERVAL: The interval of the synchronization loop, in seconds. Default '3.0' seconds.
+Setting this shorter will yield a higher load on the Emby server, but on a low latency connection can give very good synchronization results.
 
 Known Issue: Chromecasts cannot follow, but can lead.  Workaround by controlling the device casting to the Chromecast.
 
