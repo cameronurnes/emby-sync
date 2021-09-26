@@ -213,7 +213,7 @@ def comparetoleader(leader_session : Session, follower_session : Session, follow
 
     elif (leader_session.playing == True) and (follower_session.playing == True)\
             and (leader_session.item_id == follower_session.item_id)\
-            and (leader_session.is_paused == True and leader_session.is_paused == False):
+            and (leader_session.is_paused == True and follower_session.is_paused == False):
         # Leader is playing but paused. Follower is playing
         # and not yet paused
         # Pause the follower and seek it to the leader
