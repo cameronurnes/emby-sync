@@ -16,3 +16,7 @@ EMBY_SERVER: This should be the URL used to connect to your server.
 (Optional) DEFAULT_ROOM: A room name which always exists. Default is 'Bacon Bar'
 
 Known Issue: Chromecasts cannot follow, but can lead.  Workaround by controlling the device casting to the Chromecast.
+
+# Development
+API reference:
+[http://swagger.emby.media/?staticview=true#/SessionsService/](http://swagger.emby.media/?staticview=true#/SessionsService/)
