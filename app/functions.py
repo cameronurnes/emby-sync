@@ -1,3 +1,4 @@
+from typing import Tuple, Union
 import app
 import datetime
 import random
@@ -13,7 +14,12 @@ from app import functions
 from app.models import User, Session
 from flask_login import current_user
 
-def check_password(username, password):
+def check_password(username, password) -> Tuple[bool, Union[User, None]]:
+    """
+    Returns:
+        authentication status: True or False
+        user or None
+    """
     url = '{0}/Users/Authenticatebyname'.format(app.config['EMBY_SERVER'])
     headers = {
         'accept': 'application/json',
@@ -27,25 +33,30 @@ def check_password(username, password):
     response = requests.post(url, headers=headers, json=data)
     if response.status_code == 200:
         response_json = response.json()
-        update_or_create_account(response_json)
-        return True
+        new, user = update_or_create_account(response_json)
+        return True, user
     else:
         print(response.text, flush=True)
-        return False
+        return False, None
 
-def update_or_create_account(response):
-    user = db.session.query(User).filter_by(username=response['User']['ConnectUserName'].lower()).first()
+def update_or_create_account(response)-> Tuple[bool, User]:
+    """
+    Returns:
+        newuser: True, False
+        user: the user object
+    """
+    user = db.session.query(User).filter_by(username=response['User']['Name'].lower()).first()
     if user:
         user.device_id = response['SessionInfo']['DeviceId']
         user.access_key = response['AccessToken']
         db.session.commit()
         update_or_create_sessions()
-        return True
+        return True, user
     else:
-        newuser = User(emby_id=response['User']['Id'], username=response['User']['ConnectUserName'].lower(), access_key=response['AccessToken'], device_id=response['SessionInfo']['DeviceId'])
+        newuser = User(emby_id=response['User']['Id'], username=response['User']['Name'].lower(), access_key=response['AccessToken'], device_id=response['SessionInfo']['DeviceId'])
         db.session.add(newuser)
         db.session.commit()
-        return True
+        return True, newuser
 
 def end_session():
     for z in current_user.sessions:
