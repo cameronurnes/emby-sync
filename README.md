@@ -24,3 +24,14 @@ Known Issue: Chromecasts cannot follow, but can lead.  Workaround by controlling
 # Development
 API reference:
 [http://swagger.emby.media/?staticview=true#/SessionsService/](http://swagger.emby.media/?staticview=true#/SessionsService/)
+
+## Start Development Server
+```
+python dev_start.py
+```
+For the dev server, the host and port can be defined by using environment variables:  
+```
+export HOST="0.0.0.0"
+export PORT="5000"
+python dev_start.py
+```
