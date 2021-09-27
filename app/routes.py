@@ -63,10 +63,10 @@ def login():
         return redirect(url_for('index'))
     form = LoginForm()
     if form.validate_on_submit():
-        if not check_password(form.username.data, form.password.data):
+        authenticated, user = check_password(form.username.data, form.password.data)
+        if not authenticated:
             flash('Invalid username or password')
             return redirect(url_for('login'))
-        user = User.query.filter_by(username=form.username.data.lower()).first()
         login_user(user, remember=form.remember_me.data)
         next_page = request.args.get('next')
         if not next_page or url_parse(next_page).netloc != '':
