@@ -21,7 +21,7 @@ Setting this shorter will yield a higher load on the Emby server, but on a low l
 
 (Optional) BUFFER: Set to add some buffer time if some of your clients have slower connections.  10000000 = 1s.  Default = 0
 
-(Optional) SYNC_LIMIT: How far to allow clients to drift apart.  Not this is not meant to provide perfect sync and some time is required here. Default: 8s
+(Optional) SYNC_LIMIT: How far to allow clients to drift apart.  Note this is not meant to provide perfect sync and some time is required here. Default: 8s
 
 Known Issue: Chromecasts cannot follow, but can lead.  Workaround by controlling the device casting to the Chromecast.
 
