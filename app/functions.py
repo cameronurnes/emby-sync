@@ -301,7 +301,7 @@ def ensure_play(session: int, time: int, item_id: int, maxretries=8):
     """
     success = False
     retries = 0
-    while (success and retries < maxretries):
+    while (not success and retries < maxretries):
         success = start_play(session, time, item_id)
         retries += 1
 
