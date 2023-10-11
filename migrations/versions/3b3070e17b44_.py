@@ -40,6 +40,7 @@ def upgrade():
     sa.Column('leader', sa.Boolean(), nullable=True),
     sa.Column('item_id', sa.Integer(), nullable=True),
     sa.Column('device_name', sa.String(length=128), nullable=True),
+    sa.Column('username', sa.String(length=128), nullable=True),
     sa.Column('item_title', sa.String(length=128), nullable=True),
     sa.Column('client_name', sa.String(length=128), nullable=True),
     sa.Column('is_paused', sa.Boolean(), nullable=True),

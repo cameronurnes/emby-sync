@@ -122,7 +122,7 @@ def update_or_create_sessions():
                     db.session.commit()
             else:
                 if z['DeviceId'] != 'session-sync':
-                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'])
+                    newsession = Session(user_id=z['UserId'], session_id=z['Id'], device_name=z['DeviceName'], timestamp=date_time_obj, client_name=z['Client'], device_id=z['DeviceId'], username=z['UserName'])
                     db.session.add(newsession)
                     db.session.commit()
                 else:
@@ -394,14 +394,14 @@ def get_room_leader(room):
 
 def get_room_name(session):
     if session.room and session.leader != True and session.playing == True:
-        return " -- Synced to {0}, playing {1}".format(session.room, session.item_title)
+        return " -- {0} Synced to {1}, playing {2}".format(session.username, session.room, session.item_title)
     if session.room and session.leader != True and session.playing != True:
-        return " -- Synced to {0}".format(session.room)
+        return " -- {0} Synced to {1}".format(session.username, session.room)
     if session.room and session.leader == True and session.playing == True:
-        return " -- Leading {0}, playing {1}".format(session.room, session.item_title)
+        return " -- {0} Leading {1}, playing {2}".format(session.username, session.room, session.item_title)
     if session.room and session.leader == True and session.playing != True:
-        return " -- Leading {0}".format(session.room)
+        return " -- {0} Leading {1}".format(session.username, session.room)
     if session.playing == True:
-        return " -- Not synced, playing {0}".format(session.item_title)
+        return " -- {0} Not synced, playing {1}".format(session.username, session.item_title)
     else:
-        return " -- Not Synced"
+        return " -- {0} Not Synced".format(session.username)

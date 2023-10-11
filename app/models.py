@@ -32,6 +32,7 @@ class Session(db.Model):
     leader = db.Column(db.Boolean, default=False)
     item_id = db.Column(db.Integer)
     device_name = db.Column(db.String(128))
+    username = db.Column(db.String(128))
     client_name = db.Column(db.String(128))
     item_title = db.Column(db.String(128))
     is_paused = db.Column(db.Boolean, default=False)
