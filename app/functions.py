@@ -207,9 +207,11 @@ def comparetoleader(leader_session : Session, follower_session : Session, follow
     if  (leader_session.playing == True) and (follower_session.playing == True)\
             and (leader_session.item_id != follower_session.item_id):
         # If the leader isn't playing the same item as the leader,
-        # force it to play the same item
+        # force it to play the same itema
+        follower_session.syncing = True
+        db.session.commit()
         app.apscheduler.add_job(func=startplay_w_pause, trigger='date',\
-                args=[follower_session.session_id, leader_session.ticks, leader_session.item_id, leader_session.is_paused, 10000],\
+                args=[follower_session.session_id, leader_session.ticks, leader_session.item_id, leader_session.is_paused, app.config['BUFFER'], follower_session],\
                 id="PlaywPause "+follower_session.session_id+" "+leader_session.session_id)
 
     elif (leader_session.playing == True) and (follower_session.playing == True)\
@@ -220,36 +222,36 @@ def comparetoleader(leader_session : Session, follower_session : Session, follow
         # Pause the follower and seek it to the leader
         # Pause and seek session to leader
         app.apscheduler.add_job(func=pause_and_sync, trigger='date',\
-                args=[follower_session.session_id, leader_session.ticks],\
+                args=[follower_session.session_id, leader_session.ticks, follower_session],\
                 id="PauseNSync "+follower_session.session_id+" "+leader_session.session_id)
         follower_session.syncing = False
         db.session.commit()
     elif (leader_session.playing == True) and (follower_session.playing == False) and (leader_session.ticks != 0):
         # Leader is playing, this session is not yet playing
         # Start playing at the same point as the leader
-        app.apscheduler.add_job(func=ensure_play, trigger='date',\
-            args=[follower_session.session_id, leader_session.ticks, leader_session.item_id],\
-            id="Startplay "+follower_session.session_id+" "+leader_session.session_id)
-
         follower_session.syncing = True
         db.session.commit()
+        app.apscheduler.add_job(func=startplay_w_pause, trigger='date',\
+                args=[follower_session.session_id, leader_session.ticks, leader_session.item_id, leader_session.is_paused, app.config['BUFFER'], follower_session],\
+            id="Startplay "+follower_session.session_id+" "+leader_session.session_id)
     elif (leader_session.playing == True) and (follower_session.playing == True)\
         and (leader_session.is_paused == False and follower_session.is_paused == True):
         # Leader is not paused, session is paused.
         # Resume the session
-        app.apscheduler.add_job(func=send_command, trigger='date',\
+        if follower_session.syncing == False:
+            app.apscheduler.add_job(func=send_command, trigger='date',\
                 args=[follower_session.session_id, "Unpause"],\
                 id="Pause "+follower_session.session_id+" "+leader_session.session_id)
 
     elif (leader_session.playing == True) and (follower_session.playing == True) and (leader_session.ticks != 0):
         sync_drift = check_sync(follower_session.ticks, leader_session.ticks)
-        if sync_drift >= 8:
-            print(follower.username+" "+follower_session.device_name+" sync difference too much ({}), syncing ".format(sync_drift))
-            app.apscheduler.add_job(func=set_playtime, trigger='date',\
-                args=[follower_session.session_id, leader_session.ticks],\
-                id="Sync "+follower_session.session_id+" "+leader_session.session_id)
+        if (sync_drift >= float(app.config['SYNC_LIMIT'])) and follower_session.syncing == False:
             follower_session.syncing = True
             db.session.commit()
+            print(follower.username+" "+follower_session.device_name+" sync difference too much ({}), syncing ".format(sync_drift))
+            app.apscheduler.add_job(func=set_playtime, trigger='date',\
+                args=[follower_session.session_id, leader_session.ticks, app.config['BUFFER'], follower_session],\
+                id="Sync "+follower_session.session_id+" "+leader_session.session_id)
     else:
         print("Unknown situation")
 
@@ -273,37 +275,42 @@ def check_sync(follower_ticks: int, leader_ticks: int):
     return drift
 
 
-def pause_and_sync(follower_id, time:int):
+def pause_and_sync(follower_id, time:int, follower: Session):
     send_command(follower_id, "Pause")
     # Now sync
-    set_playtime(follower_id, time=time)
+    set_playtime(follower_id, time, 0, follower)
 
 
-def startplay_w_pause(session: int, time: int, item_id: int, pause: bool, buffer=0):
+def startplay_w_pause(session: int, seektime: int, item_id: int, pause: bool, buffer: int, follower: Session):
     """
     Tell the session to play the item at the given time
     If buffer is given, add that amount of time to give the follower time to buffer
-    Roughly 10000 ticks is 1 second
+    Roughly 10,000,000 ticks is 1 second, or 10,000 ticks per ms
     """
-    target = time + buffer
+    target = seektime + int(buffer)
     start_play(
         session,
         time=target,
         item_id=item_id
     )
     # If the leader is paused, also tell the follower to pause
-    if (pause == True):
-        send_command(session.session_id, "Pause")
+    if (pause == True) or (buffer != 0):
+        send_command(session, "Pause")
+    if (pause == False) and (buffer !=0):
+        time.sleep(float(buffer)/10000000)
+        send_command(session, "Unpause")
+    follower.syncing = False
+    db.session.commit()
 
 
-def ensure_play(session: int, time: int, item_id: int, maxretries=8):
+def ensure_play(session: int, time: int, item_id: int, pause: bool, buffer: int, follower: Session, maxretries=8):
     """
     Retry start_play until succesful or the maxretries is hit
     """
     success = False
     retries = 0
     while (not success and retries < maxretries):
-        success = start_play(session, time, item_id)
+        success = startplay_w_pause(session, time, item_id, pause, buffer, follower)
         retries += 1
 
 
@@ -334,7 +341,7 @@ def start_play(session: int, time: int, item_id: int) -> bool:
         return False
 
 
-def set_playtime(session: int, time: int) -> bool:
+def set_playtime(session: int, seektime: int, buffer: int, follower: Session) -> bool:
     """
     Tell the session to jump (seek) to the already playing item
     Args:
@@ -343,6 +350,7 @@ def set_playtime(session: int, time: int) -> bool:
     Returns:
         result: True if successful, False if not
     """
+    target = seektime + int(buffer)
     url = '{0}/Sessions/{1}/Playing/Seek'.format(app.config['EMBY_SERVER'], session)
     headers = {
         'accept': 'application/json',
@@ -354,14 +362,22 @@ def set_playtime(session: int, time: int) -> bool:
         'X-Emby-Token': app.config['SECRET_KEY']
     }
     params = {
-        'SeekPositionTicks': time
+        'SeekPositionTicks': target
     }
     response = requests.post(url, headers=headers, params=params)
     if response.status_code == 204:
+        if buffer != 0:
+            send_command(session, "Pause")
+            time.sleep(float(buffer)/10000000)
+            send_command(session, "Unpause")
+        follower.syncing = False
+        db.session.commit()
         return True
     else:
         print(response.text, flush=True)
         print(response.status_code, flush=True)
+        follower.syncing = False
+        db.session.commit()
         return False
 
 def send_command(session, command):
