@@ -20,6 +20,7 @@ EMBY_SERVER: This should be the URL used to connect to your server.
 Setting this shorter will yield a higher load on the Emby server, but on a low latency connection can give very good synchronization results.
 
 Known Issue: Chromecasts cannot follow, but can lead.  Workaround by controlling the device casting to the Chromecast.
+Known Issue: Currently playing display only works for movies
 
 # Development
 API reference:
