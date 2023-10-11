@@ -112,6 +112,7 @@ def update_or_create_sessions():
                     emby_session.item_id = z['NowPlayingItem']['Id']
                     emby_session.ticks = z['PlayState']['PositionTicks']
                     emby_session.is_paused = z['PlayState']['IsPaused']
+                    emby_session.item_title = z['NowPlayingItem']['OriginalTitle']
                     db.session.commit()
                 else:
                     emby_session.playing = False
@@ -392,9 +393,15 @@ def get_room_leader(room):
         return ""
 
 def get_room_name(session):
-    if session.room and session.leader != True:
+    if session.room and session.leader != True and session.playing == True:
+        return " -- Synced to {0}, playing {1}".format(session.room, session.item_title)
+    if session.room and session.leader != True and session.playing != True:
         return " -- Synced to {0}".format(session.room)
-    if session.room and session.leader == True:
+    if session.room and session.leader == True and session.playing == True:
+        return " -- Leading {0}, playing {1}".format(session.room, session.item_title)
+    if session.room and session.leader == True and session.playing != True:
         return " -- Leading {0}".format(session.room)
+    if session.playing == True:
+        return " -- Not synced, playing {0}".format(session.item_title)
     else:
         return " -- Not Synced"
